@@ -73,7 +73,7 @@ getEditorCommand = do {
   }
 
 tipName :: String -> String -> String
-tipName dir tip = dir ++ tip ++ tipExtension
+tipName dir tip = dir ++ "/" ++ tip ++ tipExtension
 
 showTip :: String -> String -> IO ()
 showTip dir tip = do

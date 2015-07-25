@@ -1,12 +1,12 @@
 tip
 ===
 
-Tip is a very simple terminal line note pad. It can help you take and retrieve
-notes, e.g., about some common command line options for a particular tool -
-right from the terminal. Compared to other similar tools, tip has two main
-advantages: 1. It uses gpg to encrypt your notes (which means you can put them
-in a version control system without being worried about the contents of your
-notes) and 2. it uses pygments to syntax highlight your notes.
+Tip is a very simple terminal note pad. It can help you take and retrieve notes,
+e.g., about some common command line options for a particular tool - right from
+the terminal. Compared to other similar tools, tip has two main advantages: 1.
+It uses gpg to encrypt your notes (which means you can put them in a version
+control system without being worried about the contents of your notes) and 2. it
+uses pygments to syntax highlight your notes.
 
 If you find any problem, feel free to start a discussion on the `issues
 <https://github.com/duerrp/tip/issues>`__ page.

@@ -57,7 +57,7 @@ parseArgs argv = case getOpt Permute flags argv of
         hPutStrLn stderr (concat errs ++ usageInfo header flags)
         exitWith (ExitFailure 1)
 
-    where header = "Usage: tip [-ce] [keyword]"
+    where header = "Usage: tip [-e] [keyword]"
 
 getTipDir :: IO String
 getTipDir = do {

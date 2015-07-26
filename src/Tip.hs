@@ -65,15 +65,19 @@ flags = [Option "e" [] (NoArg Edit)
 -- Parse the command line arguments
 parseArgs :: [String] -> IO ([Flag], [String])
 parseArgs argv = case getOpt Permute flags argv of
-    (args, tips, []) -> if Help `elem` args || null tips
+    (args, [], _) -> if Help `elem` args
             then do hPutStrLn stderr (usageInfo header flags)
                     exitSuccess
-            else return (nub args, tips)
+            else do
+                    hPutStrLn stderr header
+                    exitWith $ ExitFailure 1
+    (args, tips, []) -> return (nub args, tips)
     (_, _, errs) -> do
-        hPutStrLn stderr (concat errs ++ usageInfo header flags)
+        hPutStrLn stderr (concat errs ++ header)
         exitWith $ ExitFailure 1
 
-    where header = "Usage: tip [-e] [keyword]"
+    where header = "Usage: tip [--help]\n" ++
+                   "           [-e] [-n] tip..."
 
 -- Returns the directory with the tips
 -- If possible from environment variable, otherwise falling back to default

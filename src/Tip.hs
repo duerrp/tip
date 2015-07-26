@@ -63,17 +63,17 @@ parseArgs argv = case getOpt Permute flags argv of
     where header = "Usage: tip [-e] [keyword]"
 
 getTipDir :: IO String
-getTipDir = do {
-  getEnv tipDirEnvVarName;
-  } `catchIOError` \_ -> return defaultTipDir
+getTipDir = catchIOError (getEnv tipDirEnvVarName) $ \_ -> return defaultTipDir
 
 getEditorCommand :: IO String
-getEditorCommand = do {
-  getEnv "EDITOR";
-  } `catchIOError` \_ -> do {
-  hPutStrLn stderr "EDITOR environment variable not set, trying to use emacs.";
-  return "emacs"
-  }
+getEditorCommand =
+  catchIOError (getEnv "EDITOR") $
+  \_ -> do {
+    hPutStrLn
+    stderr
+    "EDITOR environment variable not set, trying to use emacs.";
+    return "emacs"
+    }
 
 tipName :: String -> String -> String
 tipName dir tip = dir ++ "/" ++ tip ++ tipExtension

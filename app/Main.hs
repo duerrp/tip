@@ -11,5 +11,6 @@ main :: IO ()
 main = do
   (args, tip) <- getArgs >>= parseArgs
   dir <- getTipDir
+  let color = NoColor `notElem` args
   if Edit `elem` args then mapM_ (editTip dir) tip
-                           else mapM_ (showTip dir) tip
+                           else mapM_ (showTip dir color) tip

@@ -7,7 +7,7 @@ module Tip
     , getTipDir
     , parseArgs
     , editTip
-    , Flag(Edit)
+    , Flag(Edit, NoColor)
     ) where
 
 import System.Environment(getEnv)
@@ -36,14 +36,17 @@ tipExtension :: String
 tipExtension = ".gpg"
 
 data Flag
-    = Help   -- --help
-    | Edit -- -e
+    = Edit -- -e
+    | NoColor -- -n
+    | Help   -- --help
     deriving (Eq,Ord,Show)
 
 flags :: [OptDescr Flag]
 flags = [Option "e" [] (NoArg Edit)
              "Edit a tip."
-        ,Option "h"    ["help"] (NoArg Help)
+        ,Option "n" ["no-color"] (NoArg NoColor)
+             "Do not syntax highlight tip."
+        ,Option "h" ["help"] (NoArg Help)
              "Print this help message."
         ]
 
@@ -75,18 +78,20 @@ getEditorCommand = do {
 tipName :: String -> String -> String
 tipName dir tip = dir ++ "/" ++ tip ++ tipExtension
 
-showTip :: String -> String -> IO ()
-showTip dir tip = do
+showTip :: String -> Bool -> String -> IO ()
+showTip dir color tip = do
   let fileName = tipName dir tip
   content <- readProcess "gpg" ["-q"
                                , "--no-tty"
                                , "-d", fileName] []
-  pygmentizied <- readProcess "pygmentize" ["-l"
-                                           , "sh"
-                                           , "-O", "style=emacs"
-                                           , "-f", "terminal256"
-                                           ] content
-  putStrLn pygmentizied
+  if color then do
+    pygmentizied <- readProcess "pygmentize" ["-l"
+                                             , "sh"
+                                             , "-O", "style=emacs"
+                                             , "-f", "terminal256"
+                                             ] content
+    putStrLn pygmentizied
+  else putStrLn content
 
 editTip :: String -> String -> IO ()
 editTip dir tip = do

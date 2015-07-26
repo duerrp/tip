@@ -25,6 +25,7 @@ import System.Exit(exitWith
 import Data.List(nub)
 import System.Process(readProcess
                      ,system)
+import System.Directory(doesFileExist)
 
 tipDirEnvVarName :: String
 tipDirEnvVarName = "TIP_DIRECTORY"
@@ -81,17 +82,32 @@ tipName dir tip = dir ++ "/" ++ tip ++ tipExtension
 showTip :: String -> Bool -> String -> IO ()
 showTip dir color tip = do
   let fileName = tipName dir tip
-  content <- readProcess "gpg" ["-q"
-                               , "--no-tty"
-                               , "-d", fileName] []
-  if color then do
-    pygmentizied <- readProcess "pygmentize" ["-l"
-                                             , "sh"
-                                             , "-O", "style=emacs"
-                                             , "-f", "terminal256"
-                                             ] content
-    putStrLn pygmentizied
-  else putStrLn content
+  exists <- doesFileExist fileName
+  printTip exists color fileName
+
+printTip :: Bool -> Bool -> String -> IO ()
+printTip exists color fileName = do
+  if not exists then failure fileName
+    else reallyPrint color fileName
+
+failure :: String -> IO ()
+failure fileName  = do
+  putStrLn $ "Tip " ++ fileName ++ " does not exist (create with -e)."
+  exitWith $ ExitFailure 1
+
+reallyPrint :: Bool -> String -> IO ()
+reallyPrint color fileName = do
+   content <- readProcess "gpg" ["-q"
+                                , "--no-tty"
+                                , "-d", fileName] [];
+   if color then do
+     pygmentizied <- readProcess "pygmentize" ["-l"
+                                              , "sh"
+                                              , "-O", "style=emacs"
+                                              , "-f", "terminal256"
+                                              ] content
+     putStrLn pygmentizied
+   else putStrLn content
 
 editTip :: String -> String -> IO ()
 editTip dir tip = do

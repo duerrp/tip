@@ -77,7 +77,7 @@ parseArgs argv = case getOpt Permute flags argv of
         exitWith $ ExitFailure 1
 
     where header = "Usage: tip [--help]\n" ++
-                   "           [-e] [-n] tip..."
+                   "           [-e] [-n] TIP..."
 
 -- Returns the directory with the tips
 -- If possible from environment variable, otherwise falling back to default

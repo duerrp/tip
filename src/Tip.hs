@@ -71,7 +71,7 @@ parseArgs argv = case getOpt Permute flags argv of
             else return (nub args, tips)
     (_, _, errs) -> do
         hPutStrLn stderr (concat errs ++ usageInfo header flags)
-        exitWith (ExitFailure 1)
+        exitWith $ ExitFailure 1
 
     where header = "Usage: tip [-e] [keyword]"
 
@@ -115,7 +115,7 @@ readTip fileName = do
 printTip :: Bool -> Maybe String -> IO ()
 printTip _ Nothing = do
   putStrLn "Tip does not exist (create with -e)."
-  exitWith $ ExitFailure 1
+  exitWith $ ExitFailure 2
 printTip True (Just contents) = do
      pygmentizied <- readProcess "pygmentize" ["-l"
                                               , "sh"

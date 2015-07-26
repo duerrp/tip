@@ -26,22 +26,33 @@ import Data.List(nub)
 import System.Process(readProcess
                      ,system)
 import System.Directory(doesFileExist)
+import Data.Traversable(sequenceA)
+import Utils
 
+-- The environment variable with the directory for the tips
 tipDirEnvVarName :: String
 tipDirEnvVarName = "TIP_DIRECTORY"
 
+-- The default directory for tips
 defaultTipDir :: String
 defaultTipDir = "~/.tips"
 
+-- The default editor command
+defaultEditor :: String
+defaultEditor = "emacs"
+
+-- The filename extension for tip files
 tipExtension :: String
 tipExtension = ".gpg"
 
+-- Flags set from the command line
 data Flag
     = Edit -- -e
     | NoColor -- -n
     | Help   -- --help
     deriving (Eq,Ord,Show)
 
+-- The command line options
 flags :: [OptDescr Flag]
 flags = [Option "e" [] (NoArg Edit)
              "Edit a tip."
@@ -51,6 +62,7 @@ flags = [Option "e" [] (NoArg Edit)
              "Print this help message."
         ]
 
+-- Parse the command line arguments
 parseArgs :: [String] -> IO ([Flag], [String])
 parseArgs argv = case getOpt Permute flags argv of
     (args, tips, []) -> if Help `elem` args || null tips
@@ -63,9 +75,13 @@ parseArgs argv = case getOpt Permute flags argv of
 
     where header = "Usage: tip [-e] [keyword]"
 
+-- Returns the directory with the tips
+-- If possible from environment variable, otherwise falling back to default
 getTipDir :: IO String
 getTipDir = catchIOError (getEnv tipDirEnvVarName) $ \_ -> return defaultTipDir
 
+-- Get the editor command
+-- If possible from environment variable, otherwise falling back to default
 getEditorCommand :: IO String
 getEditorCommand =
   catchIOError (getEnv "EDITOR") $
@@ -73,42 +89,43 @@ getEditorCommand =
     hPutStrLn
     stderr
     "EDITOR environment variable not set, trying to use emacs.";
-    return "emacs"
+    return defaultEditor
     }
 
+-- Construnt the name of the tip file from directory, name and extension
 tipName :: String -> String -> String
 tipName dir tip = dir ++ "/" ++ tip ++ tipExtension
 
+-- Show a tip
 showTip :: String -> Bool -> String -> IO ()
 showTip dir color tip = do
   let fileName = tipName dir tip
+  contents <- readTip fileName
+  printTip color contents
+
+-- Read the contents of a tip file
+readTip :: String -> IO (Maybe String)
+readTip fileName = do
   exists <- doesFileExist fileName
-  printTip exists color fileName
+  sequenceA (fromBool exists $ readProcess "gpg" ["-q"
+                                                 , "--no-tty"
+                                                 , "-d", fileName] [])
 
-printTip :: Bool -> Bool -> String -> IO ()
-printTip exists color fileName = do
-  if not exists then failure fileName
-    else reallyPrint color fileName
-
-failure :: String -> IO ()
-failure fileName  = do
-  putStrLn $ "Tip " ++ fileName ++ " does not exist (create with -e)."
+-- Print the contents of a tip file
+printTip :: Bool -> Maybe String -> IO ()
+printTip _ Nothing = do
+  putStrLn "Tip does not exist (create with -e)."
   exitWith $ ExitFailure 1
-
-reallyPrint :: Bool -> String -> IO ()
-reallyPrint color fileName = do
-   content <- readProcess "gpg" ["-q"
-                                , "--no-tty"
-                                , "-d", fileName] [];
-   if color then do
+printTip True (Just contents) = do
      pygmentizied <- readProcess "pygmentize" ["-l"
                                               , "sh"
                                               , "-O", "style=emacs"
                                               , "-f", "terminal256"
-                                              ] content
+                                              ] contents
      putStrLn pygmentizied
-   else putStrLn content
+printTip False (Just contents) = putStrLn contents
 
+-- Edit a tip file
 editTip :: String -> String -> IO ()
 editTip dir tip = do
   let fileName = tipName dir tip

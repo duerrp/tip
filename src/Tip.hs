@@ -5,29 +5,35 @@
 module Tip
     ( showTip
     , getTipDir
-    , parseArgs
     , editTip
-    , Flag(Edit, NoColor)
+    , searchTips
     ) where
 
 import System.Environment(getEnv)
 import System.IO.Error(catchIOError)
-import System.Console.GetOpt(OptDescr(Option)
-                            ,ArgDescr(NoArg)
-                            ,getOpt
-                            ,ArgOrder(Permute)
-                            ,usageInfo)
 import System.IO(hPutStrLn
                 ,stderr)
 import System.Exit(exitWith
-                  ,exitSuccess
                   ,ExitCode(ExitFailure))
-import Data.List(nub)
 import System.Process(readProcess
                      ,system)
-import System.Directory(doesFileExist)
+import System.Directory(doesFileExist, getDirectoryContents)
+import Data.List(isSuffixOf)
+import System.FilePath((</>)
+                      ,(<.>))
 import Data.Traversable(sequenceA)
-import Utils
+import System.FilePath.Posix(takeBaseName)
+import Data.Maybe(catMaybes)
+import Text.Regex.Posix((=~))
+import Control.Concurrent.Async(mapConcurrently)
+import Text.Printf(printf)
+import Control.Monad(liftM)
+import System.Console.ANSI(ColorIntensity(Dull)
+                          ,setSGR
+                          ,Color(Blue, Red)
+                          ,SGR(SetColor)
+                          ,ConsoleLayer(Foreground))
+import Utils(fromBool, third)
 
 -- The environment variable with the directory for the tips
 tipDirEnvVarName :: String
@@ -43,41 +49,7 @@ defaultEditor = "emacs"
 
 -- The filename extension for tip files
 tipExtension :: String
-tipExtension = ".gpg"
-
--- Flags set from the command line
-data Flag
-    = Edit -- -e
-    | NoColor -- -n
-    | Help   -- --help
-    deriving (Eq,Ord,Show)
-
--- The command line options
-flags :: [OptDescr Flag]
-flags = [Option "e" [] (NoArg Edit)
-             "Edit a tip."
-        ,Option "n" ["no-color"] (NoArg NoColor)
-             "Do not syntax highlight tip."
-        ,Option "h" ["help"] (NoArg Help)
-             "Print this help message."
-        ]
-
--- Parse the command line arguments
-parseArgs :: [String] -> IO ([Flag], [String])
-parseArgs argv = case getOpt Permute flags argv of
-    (args, [], _) -> if Help `elem` args
-            then do hPutStrLn stderr (usageInfo header flags)
-                    exitSuccess
-            else do
-                    hPutStrLn stderr header
-                    exitWith $ ExitFailure 1
-    (args, tips, []) -> return (nub args, tips)
-    (_, _, errs) -> do
-        hPutStrLn stderr (concat errs ++ header)
-        exitWith $ ExitFailure 1
-
-    where header = "Usage: tip [--help]\n" ++
-                   "           [-e] [-n] TIP..."
+tipExtension = "gpg"
 
 -- Returns the directory with the tips
 -- If possible from environment variable, otherwise falling back to default
@@ -96,16 +68,16 @@ getEditorCommand =
     return defaultEditor
     }
 
--- Construnt the name of the tip file from directory, name and extension
-tipName :: String -> String -> String
-tipName dir tip = dir ++ "/" ++ tip ++ tipExtension
+-- Construct the name of the tip file from directory, name and extension
+tipName :: FilePath -> String -> FilePath
+tipName dir tip = dir </> tip <.> tipExtension
 
 -- Show a tip
 showTip :: String -> Bool -> String -> IO ()
-showTip dir color tip = do
+showTip dir noColor tip = do
   let fileName = tipName dir tip
   contents <- readTip fileName
-  printTip color contents
+  printTip (not noColor) contents
 
 -- Read the contents of a tip file
 readTip :: String -> IO (Maybe String)
@@ -120,13 +92,12 @@ printTip :: Bool -> Maybe String -> IO ()
 printTip _ Nothing = do
   putStrLn "Tip does not exist (create with -e)."
   exitWith $ ExitFailure 2
-printTip True (Just contents) = do
-     pygmentizied <- readProcess "pygmentize" ["-l"
-                                              , "sh"
-                                              , "-O", "style=emacs"
-                                              , "-f", "terminal256"
-                                              ] contents
-     putStrLn pygmentizied
+printTip True (Just contents) =
+  putStrLn =<< readProcess "pygmentize" ["-l"
+                                        , "sh"
+                                        , "-O", "style=emacs"
+                                        , "-f", "terminal256"
+                                        ] contents
 printTip False (Just contents) = putStrLn contents
 
 -- Edit a tip file
@@ -136,3 +107,45 @@ editTip dir tip = do
   editorCommand <- getEditorCommand
   exitCode <- system (concat [editorCommand, " ", fileName])
   exitWith exitCode
+
+searchTips :: String -> String -> Bool -> IO ()
+searchTips dir regexp noColor = do
+  allFiles <- getDirectoryContents dir
+  let tipFiles = filter (isSuffixOf $ "." ++ tipExtension) allFiles
+      paths = fmap (dir </>) tipFiles
+  contents <- liftM catMaybes $ mapConcurrently readTip paths
+  let lineNumbers = [1..] :: [Int]
+      truncatedFileNames = fmap takeBaseName tipFiles
+      annotatedLines = concatMap
+                       (\(fileName, content) -> (zip3
+                                                 (repeat fileName)
+                                                 lineNumbers
+                                                 (lines content)))
+                       (zip truncatedFileNames contents)
+      matching = filter ((=~ regexp) . third) annotatedLines
+      alignment = 2 + foldr (\(x, y, _) -> max $ length $ x ++ show y) 0 matching
+  mapM_ (printFormated alignment regexp) matching
+
+   where printFormated :: Int -> String -> (String, Int, String) -> IO ()
+         printFormated alignment regexp' (fileName, lineNumber, content) = do
+           let formattedInfo = printf
+                               ("%-" ++ show alignment ++ "s")
+                               (fileName ++ ":" ++ show lineNumber)
+           if noColor
+             then putStrLn $ formattedInfo ++ content
+             else do
+               colorPutStr Dull Blue formattedInfo
+               colorRegexpPutStrLn regexp' content
+
+         colorPutStr :: ColorIntensity -> Color -> String -> IO ()
+         colorPutStr fgi fg str = do
+           setSGR [SetColor Foreground fgi fg]
+           putStr str
+           setSGR []
+
+         colorRegexpPutStrLn :: String -> String -> IO ()
+         colorRegexpPutStrLn regexp' content = do
+           let (first, expression, rest) = content =~ regexp' :: (String, String, String)
+           putStr first
+           colorPutStr Dull Red expression
+           putStrLn rest

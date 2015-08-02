@@ -91,11 +91,9 @@ readExistingTip fileName = do
 readTip :: String -> IO (Maybe String)
 readTip fileName = do
   exists <- doesFileExist fileName
-  unlessMaybeIO exists $ readExistingTip fileName
-
-  where unlessMaybeIO :: Bool -> IO (Maybe a) -> IO (Maybe a)
-        unlessMaybeIO True = id
-        unlessMaybeIO _ = liftM $ const Nothing
+  if exists
+    then readExistingTip fileName
+    else return Nothing
 
 -- Print the contents of a tip file
 printTip :: Bool -> Maybe String -> IO ()

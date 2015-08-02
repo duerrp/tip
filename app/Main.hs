@@ -10,6 +10,8 @@ import qualified System.Console.CmdArgs as CmdArgs
 import System.Console.CmdArgs((&=))
 import System.Exit(exitWith
                   ,ExitCode(ExitFailure))
+import Paths_tip(version)
+import Data.Version(showVersion)
 import Tip
 
 data Commands = Show_ {tip :: [String], noColor :: Bool}
@@ -50,7 +52,13 @@ progModes :: CmdArgs.Mode (CmdArgs.CmdArgs Commands)
 progModes = CmdArgs.cmdArgsMode $ CmdArgs.modes [show_, edit, find]
           &= CmdArgs.program "tip"
           &= CmdArgs.summary "Tips from the terminal..."
-          &= CmdArgs.helpArg [CmdArgs.explicit, CmdArgs.name "help", CmdArgs.name "h"]
+          &= CmdArgs.helpArg [CmdArgs.explicit,
+                              CmdArgs.name "help",
+                              CmdArgs.name "h"]
+          &= CmdArgs.versionArg [CmdArgs.explicit,
+                                 CmdArgs.name "version",
+                                 CmdArgs.name "V",
+                                 CmdArgs.summary ("tip " ++ showVersion version)]
 
 main :: IO ()
 main = do

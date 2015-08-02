@@ -60,12 +60,9 @@ getTipDir = catchIOError (getEnv tipDirEnvVarName) $ \_ -> return defaultTipDir
 getEditorCommand :: IO String
 getEditorCommand =
   catchIOError (getEnv "EDITOR") $
-  \_ -> do {
-    hPutStrLn
-    stderr
-    "EDITOR environment variable not set, trying to use emacs.";
+  \_ -> do
+    hPutStrLn stderr "EDITOR environment variable not set, trying to use emacs."
     return defaultEditor
-    }
 
 -- Construct the name of the tip file from directory, name and extension
 tipName :: FilePath -> String -> FilePath

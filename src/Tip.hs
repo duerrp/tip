@@ -69,17 +69,24 @@ tipName :: FilePath -> String -> FilePath
 tipName dir tip = dir </> tip <.> tipExtension
 
 -- Show a tip
-showTip :: String -> Bool -> String -> IO ()
-showTip dir noColor tip = do
+showTip :: String -> Bool -> String -> String -> IO ()
+showTip dir noColor password tip = do
   let fileName = tipName dir tip
-  contents <- readTip fileName
+  contents <- readTip password fileName
   printTip (not noColor) contents
 
-readExistingTip :: String -> IO (Maybe String)
-readExistingTip fileName = do
-  (exitCode, out, err) <- readProcessWithExitCode "gpg" ["-q"
-                                                        , "--no-tty"
-                                                        , "-d", fileName] []
+readExistingTip :: String -> String -> IO (Maybe String)
+readExistingTip password fileName = do
+  let gpgCommandArgs = if null password then
+                         ["-q"
+                         , "--no-tty"
+                         , "-d", fileName]
+                       else
+                         ["-q"
+                         , "--no-tty"
+                         , "--passphrase-fd", "0"
+                         , "-d", fileName]
+  (exitCode, out, err) <- readProcessWithExitCode "gpg" gpgCommandArgs password
   -- return (if exitCode == ExitSuccess then Just out else Nothing)
   case exitCode of
     ExitSuccess -> return $ Just out
@@ -88,11 +95,11 @@ readExistingTip fileName = do
       return Nothing
 
 -- Read the contents of a tip file
-readTip :: String -> IO (Maybe String)
-readTip fileName = do
+readTip :: String -> String -> IO (Maybe String)
+readTip password fileName = do
   exists <- doesFileExist fileName
   if exists
-    then readExistingTip fileName
+    then readExistingTip password fileName
     else return Nothing
 
 -- Print the contents of a tip file
@@ -116,12 +123,12 @@ editTip dir tip = do
   exitCode <- system (concat [editorCommand, " ", fileName])
   exitWith exitCode
 
-searchTips :: String -> String -> Bool -> IO ()
-searchTips dir regexp noColor = do
+searchTips :: String -> String -> Bool -> String -> IO ()
+searchTips dir regexp noColor password = do
   allFiles <- getDirectoryContents dir
   let tipFiles = filter (isSuffixOf $ "." ++ tipExtension) allFiles
       paths = fmap (dir </>) tipFiles
-  contents <- liftM catMaybes $ mapConcurrently readExistingTip paths
+  contents <- liftM catMaybes $ mapConcurrently (readExistingTip password) paths
   let lineNumbers = [1..] :: [Int]
       truncatedFileNames = fmap takeBaseName tipFiles
       annotatedLines = concatMap

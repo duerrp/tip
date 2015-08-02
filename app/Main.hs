@@ -12,11 +12,13 @@ import System.Exit(exitWith
                   ,ExitCode(ExitFailure))
 import Paths_tip(version)
 import Data.Version(showVersion)
+import System.IO(hPutStrLn
+                ,stderr)
 import Tip
 
-data Commands = Show_ {tip :: [String], noColor :: Bool}
+data Commands = Show_ {tip :: [String], noColor :: Bool, password :: String}
               | Edit_ {tip_ :: [String]}
-              | Find_ {regexp :: String, noColor :: Bool}
+              | Find_ {regexp :: String, noColor :: Bool, password :: String}
               deriving (CmdArgs.Data, CmdArgs.Typeable, Show, Eq)
 
 show_ :: Commands
@@ -24,7 +26,10 @@ show_ = Show_ { tip = CmdArgs.def
                       &= CmdArgs.args
                       &= CmdArgs.typ "TIP, ..."
               , noColor = CmdArgs.def
-                          &= CmdArgs.help "Do not syntax-highlight the output." }
+                          &= CmdArgs.help "Do not syntax-highlight the output."
+              , password = CmdArgs.def
+                           &= CmdArgs.typ "PASSWORD"
+                           &= CmdArgs.help "Use symmetric encrytpion password." }
         &= CmdArgs.explicit
         &= CmdArgs.name "--show"
         &= CmdArgs.help "Show a tip."
@@ -43,7 +48,12 @@ find = Find_ { regexp = CmdArgs.def
                         &= CmdArgs.argPos 1
                         &= CmdArgs.typ "REGEXP"
              , noColor = CmdArgs.def
-                         &= CmdArgs.help "Do not colorize the output."}
+                         &= CmdArgs.help "Do not colorize the output."
+             , password = CmdArgs.def
+                          -- for some reason needs to be different from above, so
+                          -- added space
+                          &= CmdArgs.typ "PASSWORD "
+                          &= CmdArgs.help "Use symmetric encrytpion password. " }
        &= CmdArgs.explicit
        &= CmdArgs.name "-f"
        &= CmdArgs.help "Find a tip (by regexp)."
@@ -65,12 +75,12 @@ main = do
   args' <- getArgs
   case args' of
     [] -> do
-        putStrLn "Usage: tip [-h] [-e|-f] [OPTIONS] TIP"
+        hPutStrLn stderr "Usage: tip [-h] [-e|-f] [OPTIONS] TIP"
         exitWith $ ExitFailure 1
     _ -> do
         opts <- CmdArgs.cmdArgsRun progModes
         dir <- getTipDir
         case opts of
-          Show_ ttip noColor' -> mapM_ (showTip dir noColor') ttip
-          Edit_ ttip -> mapM_ (editTip dir) ttip
-          Find_ regexp' noColor' -> searchTips dir regexp' noColor'
+          Show_ tips noColor' password' -> mapM_ (showTip dir noColor' password') tips
+          Edit_ tip' -> mapM_ (editTip dir) tip'
+          Find_ regexp' noColor' password' -> searchTips dir regexp' noColor' password'

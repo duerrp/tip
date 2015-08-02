@@ -13,7 +13,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Tip, Utils
+  exposed-modules:     Tip
   build-depends:       base >= 4.7 && < 5
                      , process == 1.2.0.0
                      , directory == 1.2.1.0

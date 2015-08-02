@@ -14,14 +14,14 @@ import System.IO.Error(catchIOError)
 import System.IO(hPutStrLn
                 ,stderr)
 import System.Exit(exitWith
-                  ,ExitCode(ExitFailure))
+                  ,ExitCode(ExitFailure, ExitSuccess))
 import System.Process(readProcess
+                     ,readProcessWithExitCode
                      ,system)
 import System.Directory(doesFileExist, getDirectoryContents)
 import Data.List(isSuffixOf)
 import System.FilePath((</>)
                       ,(<.>))
-import Data.Traversable(sequenceA)
 import System.FilePath.Posix(takeBaseName)
 import Data.Maybe(catMaybes)
 import Text.Regex.Posix((=~))
@@ -33,7 +33,6 @@ import System.Console.ANSI(ColorIntensity(Dull)
                           ,Color(Blue, Red)
                           ,SGR(SetColor)
                           ,ConsoleLayer(Foreground))
-import Utils(fromBool, third)
 
 -- The environment variable with the directory for the tips
 tipDirEnvVarName :: String
@@ -79,13 +78,27 @@ showTip dir noColor tip = do
   contents <- readTip fileName
   printTip (not noColor) contents
 
+readExistingTip :: String -> IO (Maybe String)
+readExistingTip fileName = do
+  (exitCode, out, err) <- readProcessWithExitCode "gpg" ["-q"
+                                                        , "--no-tty"
+                                                        , "-d", fileName] []
+  -- return (if exitCode == ExitSuccess then Just out else Nothing)
+  case exitCode of
+    ExitSuccess -> return $ Just out
+    _           -> do
+      hPutStrLn stderr $ "An error occured while decrypting tip: " ++ err
+      return Nothing
+
 -- Read the contents of a tip file
 readTip :: String -> IO (Maybe String)
 readTip fileName = do
   exists <- doesFileExist fileName
-  sequenceA (fromBool exists $ readProcess "gpg" ["-q"
-                                                 , "--no-tty"
-                                                 , "-d", fileName] [])
+  unlessMaybeIO exists $ readExistingTip fileName
+
+  where unlessMaybeIO :: Bool -> IO (Maybe a) -> IO (Maybe a)
+        unlessMaybeIO True = id
+        unlessMaybeIO _ = liftM $ const Nothing
 
 -- Print the contents of a tip file
 printTip :: Bool -> Maybe String -> IO ()
@@ -113,7 +126,7 @@ searchTips dir regexp noColor = do
   allFiles <- getDirectoryContents dir
   let tipFiles = filter (isSuffixOf $ "." ++ tipExtension) allFiles
       paths = fmap (dir </>) tipFiles
-  contents <- liftM catMaybes $ mapConcurrently readTip paths
+  contents <- liftM catMaybes $ mapConcurrently readExistingTip paths
   let lineNumbers = [1..] :: [Int]
       truncatedFileNames = fmap takeBaseName tipFiles
       annotatedLines = concatMap
@@ -126,7 +139,10 @@ searchTips dir regexp noColor = do
       alignment = 2 + foldr (\(x, y, _) -> max $ length $ x ++ show y) 0 matching
   mapM_ (printFormated alignment regexp) matching
 
-   where printFormated :: Int -> String -> (String, Int, String) -> IO ()
+   where third :: (a, b, c) -> c
+         third (_, _, x) = x
+
+         printFormated :: Int -> String -> (String, Int, String) -> IO ()
          printFormated alignment regexp' (fileName, lineNumber, content) = do
            let formattedInfo = printf
                                ("%-" ++ show alignment ++ "s")

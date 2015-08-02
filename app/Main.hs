@@ -23,7 +23,8 @@ show_ = Show_ { tip = CmdArgs.def
                       &= CmdArgs.typ "TIP, ..."
               , noColor = CmdArgs.def
                           &= CmdArgs.help "Do not syntax-highlight the output." }
-        &= CmdArgs.name "-s"
+        &= CmdArgs.explicit
+        &= CmdArgs.name "--show"
         &= CmdArgs.help "Show a tip."
         &= CmdArgs.auto
 
@@ -31,6 +32,7 @@ edit :: Commands
 edit = Edit_ { tip_ = CmdArgs.def
                       &= CmdArgs.argPos 0
                       &= CmdArgs.typ "TIP" }
+       &= CmdArgs.explicit
        &= CmdArgs.name "-e"
        &= CmdArgs.help "Edit a tip."
 
@@ -40,6 +42,7 @@ find = Find_ { regexp = CmdArgs.def
                         &= CmdArgs.typ "REGEXP"
              , noColor = CmdArgs.def
                          &= CmdArgs.help "Do not colorize the output."}
+       &= CmdArgs.explicit
        &= CmdArgs.name "-f"
        &= CmdArgs.help "Find a tip (by regexp)."
 

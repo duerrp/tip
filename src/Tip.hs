@@ -105,7 +105,7 @@ readTip password fileName = do
 -- Print the contents of a tip file
 printTip :: Bool -> Maybe String -> IO ()
 printTip _ Nothing = do
-  putStrLn "Tip does not exist (create with -e)."
+  hPutStrLn stderr "Tip does not exist (create with -e)."
   exitWith $ ExitFailure 2
 printTip True (Just contents) =
   putStrLn =<< readProcess "pygmentize" ["-l"

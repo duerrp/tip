@@ -10,6 +10,8 @@ import Control.Monad(liftM)
 import Text.Regex.Posix((=~))
 
 runCommand = "test/run_tip.sh"
+blueColorEscape = "\\[34m"
+commentColorEscape = "\\[38;5;28m"
 
 main :: IO ()
 main = defaultMain tests
@@ -34,12 +36,24 @@ tests = [ testGroup "Command Line - No Arguments" [
         , testGroup "Command Line - Show" [
                testCase "Showing existing tip returns ExitSuccess" testShow0
              , testCase "Showing existing tip prints" testShow1
+             , testCase "Showing nonexistant tip fails" testShow2
+             , testCase "Showing tip uses colors" testShow3
+             , testCase "Showing tip respects -n" testShow4
+             , testCase "Showing tip respects --nocolor" testShow5
              ]
         , testGroup "Command Line - Edit" [
                testCase "Call with -e calls editor command" testEdit0
+             , testCase "Call with -e without argument fails" testEdit1
              ]
         , testGroup "Command Line - Find" [
-               testCase "Call with -f finds line" testFind0
+               testCase "Call with -f succeeds" testFind0
+             , testCase "Call with -f finds one line" testFind1
+             , testCase "Call with -f finds two lines" testFind2
+             , testCase "Call with -f colors" testFind3
+             , testCase "Call with -f respects -n" testFind4
+             , testCase "Call with -f respects --nocolor" testFind5
+             , testCase "Call with -f finds nothing" testFind6
+             , testCase "Call with -f without argument fails" testFind7
              ]
         ]
 
@@ -104,14 +118,89 @@ testShow1 = do
   (exitCode, out, err) <- readProcessWithExitCode runCommand ["-p", "bla", "foo"] []
   out @?= "This is a test...\n\n"
 
+testShow2 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-p", "bla", "foobar"] []
+  exitCode @?= ExitFailure 2
+  err @?= "Tip does not exist (create with -e).\n"
+
+testShow3 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "baz"] []
+  exitCode @?= ExitSuccess
+  let matches = out =~ commentColorEscape :: Bool
+  assert matches
+
+testShow4 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "-n", "baz"] []
+  exitCode @?= ExitSuccess
+  let matches = out =~ commentColorEscape :: Bool
+  assert $ not matches
+
+testShow5 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "--nocolor", "baz"] []
+  exitCode @?= ExitSuccess
+  let matches = out =~ commentColorEscape :: Bool
+  assert $ not matches
+
 testEdit0 = do
   setEnv "TIP_DIRECTORY" "test/files"
   setEnv "EDITOR" "echo"
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-e", "foo"] []
+  (_, out, _) <- readProcessWithExitCode runCommand ["-e", "foo"] []
   out @?= "test/files/foo.gpg\n"
+
+testEdit1 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  setEnv "EDITOR" "echo"
+  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-e"] []
+  exitCode @?= ExitFailure 1
+  err @?= "Requires at least 1 arguments, got 0\n"
 
 testFind0 = do
   setEnv "TIP_DIRECTORY" "test/files"
-  setEnv "EDITOR" "echo"
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
+  (exitCode, _, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
   exitCode @?= ExitSuccess
+
+testFind1 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "another"] []
+  exitCode @?= ExitSuccess
+  length (lines out) @?= 1
+
+testFind2 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
+  exitCode @?= ExitSuccess
+  length (lines out) @?= 2
+
+testFind3 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
+  let matches = out =~ blueColorEscape :: Bool
+  assert matches
+
+testFind4 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "-n", "-p", "bla", "test"] []
+  let matches = out =~ blueColorEscape :: Bool
+  assert $ not matches
+
+testFind5 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "--nocolor", "-p", "bla", "test"] []
+  let matches = out =~ blueColorEscape :: Bool
+  assert $ not matches
+
+testFind6 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "foobar"] []
+  exitCode @?= ExitSuccess
+  out @?= ""
+
+testFind7 = do
+  setEnv "TIP_DIRECTORY" "test/files"
+  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-f", "-p", "bla"] []
+  exitCode @?= ExitFailure 1
+  err @?= "Requires at least 1 arguments, got 0\n"

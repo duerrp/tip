@@ -7,6 +7,7 @@ module Tip
     , getTipDir
     , editTip
     , searchTips
+    , listTips
     ) where
 
 import System.Environment(getEnv)
@@ -21,7 +22,8 @@ import System.Process(readProcess
 import System.Directory(doesFileExist, getDirectoryContents)
 import Data.List(isSuffixOf)
 import System.FilePath((</>)
-                      ,(<.>))
+                      ,(<.>)
+                      )
 import System.FilePath.Posix(takeBaseName)
 import Data.Maybe(catMaybes)
 import Text.Regex.Posix((=~))
@@ -167,3 +169,8 @@ searchTips dir regexp noColor password = do
            putStr first
            colorPutStr Dull Red expression
            putStrLn rest
+
+listTips :: String -> IO [String]
+listTips dir = do
+  allFiles <- getDirectoryContents dir
+  return $ takeBaseName <$> filter (isSuffixOf $ "." ++ tipExtension) allFiles

@@ -19,6 +19,7 @@ import Tip
 data Commands = Show_ {tip :: [String], noColor :: Bool, password :: String}
               | Edit_ {tip_ :: [String]}
               | Find_ {regexp :: String, noColor :: Bool, password :: String}
+              | List_ {}
               deriving (CmdArgs.Data, CmdArgs.Typeable, Show, Eq)
 
 show_ :: Commands
@@ -58,8 +59,14 @@ find = Find_ { regexp = CmdArgs.def
        &= CmdArgs.name "-f"
        &= CmdArgs.help "Find a tip (by regexp)."
 
+list :: Commands
+list = List_ {}
+       &= CmdArgs.explicit
+       &= CmdArgs.name "-l"
+       &= CmdArgs.help "List all tips"
+
 progModes :: CmdArgs.Mode (CmdArgs.CmdArgs Commands)
-progModes = CmdArgs.cmdArgsMode $ CmdArgs.modes [show_, edit, find]
+progModes = CmdArgs.cmdArgsMode $ CmdArgs.modes [show_, edit, find, list]
           &= CmdArgs.program "tip"
           &= CmdArgs.summary "Tips from the terminal..."
           &= CmdArgs.helpArg [CmdArgs.explicit,
@@ -75,7 +82,7 @@ main = do
   args' <- getArgs
   case args' of
     [] -> do
-        hPutStrLn stderr "Usage: tip [-h] [-e|-f] [OPTIONS] TIP"
+        hPutStrLn stderr "Usage: tip [-h|-l] [-e|-f] [OPTIONS] TIP"
         exitWith $ ExitFailure 1
     _ -> do
         opts <- CmdArgs.cmdArgsRun progModes
@@ -84,3 +91,4 @@ main = do
           Show_ tips noColor' password' -> mapM_ (showTip dir noColor' password') tips
           Edit_ tip' -> mapM_ (editTip dir) tip'
           Find_ regexp' noColor' password' -> searchTips dir regexp' noColor' password'
+          List_ -> (listTips dir) >>= mapM_ putStrLn

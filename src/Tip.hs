@@ -46,7 +46,7 @@ defaultTipDir = "~/.tips"
 
 -- The default editor command
 defaultEditor :: String
-defaultEditor = "emacs"
+defaultEditor = "emacsclient -c -a \"\""
 
 -- The filename extension for tip files
 tipExtension :: String

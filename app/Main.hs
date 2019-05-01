@@ -82,8 +82,8 @@ main = do
   args' <- getArgs
   case args' of
     [] -> do
-        hPutStrLn stderr "Usage: tip [-h|-l] [-e|-f] [OPTIONS] TIP"
-        exitWith $ ExitFailure 1
+        hPutStrLn stderr usageString
+        exitWith usageFailure
     _ -> do
         opts <- CmdArgs.cmdArgsRun progModes
         dir <- getTipDir
@@ -91,4 +91,4 @@ main = do
           Show_ tips noColor' password' -> mapM_ (showTip dir noColor' password') tips
           Edit_ tip' -> mapM_ (editTip dir) tip'
           Find_ regexp' noColor' password' -> searchTips dir regexp' noColor' password'
-          List_ -> (listTips dir) >>= mapM_ putStrLn
+          List_ -> listTips dir >>= mapM_ putStrLn

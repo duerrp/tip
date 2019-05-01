@@ -1,3 +1,3 @@
 #!/usr/bin/env sh
 
-/usr/bin/stack exec tip -- $@
+/usr/bin/env stack exec tip -- $@

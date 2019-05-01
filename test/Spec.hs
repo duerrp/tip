@@ -9,6 +9,8 @@ import System.Environment(setEnv)
 import Control.Monad(liftM)
 import Text.Regex.Posix((=~))
 
+import Tip
+
 runCommand = "test/run_tip.sh"
 blueColorEscape = "\\[34m"
 commentColorEscape = "\\[38;5;28m"
@@ -17,190 +19,191 @@ main :: IO ()
 main = defaultMain tests
 
 tests = [ testGroup "Command Line - No Arguments" [
-               testCase "Call without arguments returns ExitFailure" testNoArgs0
-             , testCase "Call without arguments prints usage" testNoArgs1
-             ]
+
+            testCase "Call without arguments returns ExitFailure, prints usage" $
+              checkUsageFailure []
+
+            ]
         , testGroup "Command Line - Help" [
-               testCase "Call with -h returns ExitSuccess" testHelp0
-             , testCase "Call with --help returns ExitSuccess" testHelp1
-             , testCase "Call with -h prints help" testHelp2
-             , testCase "Call with -h equals call with --help" testHelp3
-             ]
+
+              testCase "Call with -h returns ExitSuccess" $
+                checkSucceeds ["-h"]
+
+            , testCase "Call with --help returns ExitSuccess" $
+                checkSucceeds ["--help"]
+
+            , testCase "Call with -h prints help" $
+                assertTipOutMatches "Tips from the terminal" ["--help"]
+
+            , testCase "Call with -h equals call with --help" $
+                assertTipOutsEqual ["-h"] ["--help"]
+            ]
+
         , testGroup "Command Line - Version" [
-               testCase "Call with -V returns ExitSuccess" testVersion0
-             , testCase "Call with --version returns ExitSuccess" testVersion1
-             , testCase "Call with --version returns ExitSuccess" testVersion2
-             , testCase "Call with --numeric-version returns ExitSuccess" testVersion3
-             , testCase "Call with --numeric-version prints correct version" testVersion4
+
+               testCase "Call with -V returns ExitSuccess" $
+                 checkSucceeds ["-V"]
+
+             , testCase "Call with --version returns ExitSuccess" $
+                 checkSucceeds ["--version"]
+
+             , testCase "Call with --version equals call with -V" $
+                 assertTipOutsEqual ["-V"] ["--version"]
+
+             , testCase "Call with --numeric-version returns ExitSuccess" $
+                 checkSucceeds ["--numeric-version"]
+
+             , testCase "Call with --numeric-version prints correct version" $
+                 do
+                   out' <- getVersionNumber
+                   assertTipOutMatches out' ["--numeric-version"]
              ]
+
         , testGroup "Command Line - Show" [
-               testCase "Showing existing tip returns ExitSuccess" testShow0
-             , testCase "Showing existing tip prints" testShow1
-             , testCase "Showing nonexistant tip fails" testShow2
-             , testCase "Showing tip uses colors" testShow3
-             , testCase "Showing tip respects -n" testShow4
-             , testCase "Showing tip respects --nocolor" testShow5
+
+               testCase "Showing existing tip returns ExitSuccess" $
+                 checkSucceeds ["-p", "bla", "foo"]
+
+             , testCase "Showing existing tip prints" $
+                 assertTipOutMatches "This is a test...\n\n" ["-p", "bla", "foo"]
+
+             , testCase "Showing nonexistant tip fails" $
+                 checkTipDoesNotExistFailure ["-p", "bla", "foobar"]
+
+             , testCase "Showing tip uses colors" $
+                 assertTipOutCommentColor True ["-p", "bla", "baz"]
+
+             , testCase "Showing tip respects -n" $
+                 assertTipOutCommentColor False ["-p", "bla", "-n", "baz"]
+
+             , testCase "Showing tip respects --nocolor" $
+                 assertTipOutCommentColor False ["-p", "bla", "--nocolor", "baz"]
              ]
+
         , testGroup "Command Line - Edit" [
-               testCase "Call with -e calls editor command" testEdit0
-             , testCase "Call with -e without argument fails" testEdit1
+
+               testCase "Call with -e calls editor command for existent file" $
+                assertTipOutEquals "test/files/foo.gpg\n" ["-e", "foo"]
+
+             , testCase "Call with -e calls editor command for nonexistent file" $
+                assertTipOutEquals "test/files/foobarbaz.gpg\n" ["-e", "foobarbaz"]
+
+             , testCase "Call with -e without argument fails" $
+                checkInsufficentArgumentsFailure ["-e"]
              ]
+
         , testGroup "Command Line - Find" [
-               testCase "Call with -f succeeds" testFind0
-             , testCase "Call with -f finds one line" testFind1
-             , testCase "Call with -f finds two lines" testFind2
-             , testCase "Call with -f colors" testFind3
-             , testCase "Call with -f respects -n" testFind4
-             , testCase "Call with -f respects --nocolor" testFind5
-             , testCase "Call with -f finds nothing" testFind6
-             , testCase "Call with -f without argument fails" testFind7
+
+               testCase "Call with -f succeeds even if nothing is found" $
+                checkSucceeds ["-f", "-p", "bla", "testing"]
+
+             , testCase "Call with -f finds one line when one line is present" $
+                 assertTipOutNLines 1 ["-f", "-p", "bla", "another"]
+
+             , testCase "Call with -f finds two lines when two lines are present" $
+                assertTipOutNLines 2 ["-f", "-p", "bla", "test"]
+
+             , testCase "Call with -f colors" $
+                 assertTipOutBlueColor True ["-f", "-p", "bla", "test"]
+
+             , testCase "Call with -f respects -n" $
+                 assertTipOutBlueColor False ["-f", "-n", "-p", "bla", "test"]
+
+             , testCase "Call with -f respects --nocolor" $
+                assertTipOutBlueColor False ["-f", "--nocolor", "-p", "bla", "test"]
+
+             , testCase "Call with -f does not find string not present in tips" $
+                assertTipOutEmpty ["-f", "-p", "bla", "foobar"]
+
+             , testCase "Call with -f without argument fails" $
+                checkInsufficentArgumentsFailure ["-f", "-p", "bla"]
+             ]
+
+        , testGroup "Command Line - List" [
+
+               testCase "Call with -l lists three correct tips" $
+                 assertTipOutEquals "bar\nbaz\nfoo\n" ["-l"]
              ]
         ]
 
-testNoArgs0 = do
-  (exitCode, _, _) <- readProcessWithExitCode runCommand [] []
-  exitCode @?= ExitFailure 1
+hasColorEscape :: String -> String -> Bool
+hasColorEscape = flip (=~)
 
-testNoArgs1 = do
-  (_, out, err) <- readProcessWithExitCode runCommand [] []
-  out @?= ""
-  err @?= "Usage: tip [-h] [-e|-f] [OPTIONS] TIP\n"
+hasCommentColor :: String -> Bool
+hasCommentColor = hasColorEscape commentColorEscape
 
-testHelp0 = do
-  (exitCode, _, _) <- readProcessWithExitCode runCommand ["-h"] []
+hasBlueColor :: String -> Bool
+hasBlueColor = hasColorEscape blueColorEscape
+
+testEnv :: IO ()
+testEnv = do
+  setEnv tipDirEnvVarName "test/files"
+  setEnv "EDITOR" "echo"
+
+getVersionNumber :: IO String
+getVersionNumber = second <$> readProcessWithExitCode "test/version.sh" [] []
+  where second (a, b, c) = b
+
+runTip :: [String] -> IO (ExitCode, String, String)
+runTip args = do
+  testEnv
+  readProcessWithExitCode runCommand args []
+
+getTipOut :: [String] -> IO String
+getTipOut args = do
+  (exitCode, out, err) <- runTip args
   exitCode @?= ExitSuccess
-
-testHelp1 = do
-  (exitCode, _, _) <- readProcessWithExitCode runCommand ["--help"] []
-  exitCode @?= ExitSuccess
-
-testHelp2= do
-  (_, out, err) <- readProcessWithExitCode runCommand ["--help"] []
-  assert $ out /= ""
-  let matches = out =~ "Tips from the terminal" :: Bool
-  assert matches
   err @?= ""
+  return out
 
-testHelp3= do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-h"] []
-  (exitCode', out', err') <- readProcessWithExitCode runCommand ["--help"] []
-  out @?= out'
-
-testVersion0 = do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-V"] []
+checkSucceeds :: [String] -> Assertion
+checkSucceeds args = do
+  (exitCode, _, _) <- runTip args
   exitCode @?= ExitSuccess
 
-testVersion1 = do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["--version"] []
-  exitCode @?= ExitSuccess
-
-testVersion2 = do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-V"] []
-  (exitCode', out', err') <- readProcessWithExitCode runCommand ["--version"] []
-  out @?= out'
-
-testVersion3 = do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["--numeric-version"] []
-  exitCode @?= ExitSuccess
-
-testVersion4 = do
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["--numeric-version"] []
-  (exitCode', out', err') <- readProcessWithExitCode "test/version.sh" [] []
-  out @?= out'
-
-testShow0 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-p", "bla", "foo"] []
-  exitCode @?= ExitSuccess
-
-testShow1 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, err) <- readProcessWithExitCode runCommand ["-p", "bla", "foo"] []
-  out @?= "This is a test...\n\n"
-
-testShow2 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-p", "bla", "foobar"] []
-  exitCode @?= ExitFailure 2
-  err @?= "Tip does not exist (create with -e).\n"
-
-testShow3 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "baz"] []
-  exitCode @?= ExitSuccess
-  let matches = out =~ commentColorEscape :: Bool
-  assert matches
-
-testShow4 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "-n", "baz"] []
-  exitCode @?= ExitSuccess
-  let matches = out =~ commentColorEscape :: Bool
-  assert $ not matches
-
-testShow5 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-p", "bla", "--nocolor", "baz"] []
-  exitCode @?= ExitSuccess
-  let matches = out =~ commentColorEscape :: Bool
-  assert $ not matches
-
-testEdit0 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  setEnv "EDITOR" "echo"
-  (_, out, _) <- readProcessWithExitCode runCommand ["-e", "foo"] []
-  out @?= "test/files/foo.gpg\n"
-
-testEdit1 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  setEnv "EDITOR" "echo"
-  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-e"] []
-  exitCode @?= ExitFailure 1
-  err @?= "Requires at least 1 arguments, got 0\n"
-
-testFind0 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, _, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
-  exitCode @?= ExitSuccess
-
-testFind1 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "another"] []
-  exitCode @?= ExitSuccess
-  length (lines out) @?= 1
-
-testFind2 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
-  exitCode @?= ExitSuccess
-  length (lines out) @?= 2
-
-testFind3 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "test"] []
-  let matches = out =~ blueColorEscape :: Bool
-  assert matches
-
-testFind4 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "-n", "-p", "bla", "test"] []
-  let matches = out =~ blueColorEscape :: Bool
-  assert $ not matches
-
-testFind5 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (_, out, _) <- readProcessWithExitCode runCommand ["-f", "--nocolor", "-p", "bla", "test"] []
-  let matches = out =~ blueColorEscape :: Bool
-  assert $ not matches
-
-testFind6 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, out, _) <- readProcessWithExitCode runCommand ["-f", "-p", "bla", "foobar"] []
-  exitCode @?= ExitSuccess
+checkFailure :: ExitCode -> String -> [String] -> Assertion
+checkFailure exitCode err args = do
+  (exitCode, out, err) <- runTip args
+  exitCode @?= exitCode
+  err @?= err
   out @?= ""
 
-testFind7 = do
-  setEnv "TIP_DIRECTORY" "test/files"
-  (exitCode, _, err) <- readProcessWithExitCode runCommand ["-f", "-p", "bla"] []
-  exitCode @?= ExitFailure 1
-  err @?= "Requires at least 1 arguments, got 0\n"
+checkInsufficentArgumentsFailure :: [String] -> Assertion
+checkInsufficentArgumentsFailure = checkFailure insufficientArgumentFailure insufficientArgumentString
+
+checkUsageFailure :: [String] -> Assertion
+checkUsageFailure = checkFailure usageFailure usageString
+
+checkTipDoesNotExistFailure :: [String] -> Assertion
+checkTipDoesNotExistFailure = checkFailure tipDoesNotExistFailure tipDoesNotExistString
+
+assertTipOut :: (String -> Assertion) -> [String] -> Assertion
+assertTipOut assertion args = do
+  out <- getTipOut args
+  assertion out
+
+assertTipOutMatches :: String -> [String] -> Assertion
+assertTipOutMatches match = assertTipOut $ \out -> assert (out =~ match :: Bool)
+
+assertTipOutEquals :: String -> [String] -> Assertion
+assertTipOutEquals match = assertTipOut $ \out -> out @?= match
+
+assertTipOutsEqual :: [String] -> [String] -> Assertion
+assertTipOutsEqual args args' = do
+  out <- getTipOut args
+  out' <- getTipOut args'
+  out @?= out'
+
+assertTipOutNLines :: Int -> [String] -> Assertion
+assertTipOutNLines n = assertTipOut $ \out -> length (lines out) @?= n
+
+assertTipOutEmpty :: [String] -> Assertion
+assertTipOutEmpty = assertTipOutEquals ""
+
+assertTipOutCommentColor :: Bool -> [String] -> Assertion
+assertTipOutCommentColor True = assertTipOut $ assert . hasCommentColor
+assertTipOutCommentColor False = assertTipOut $ assert . not . hasCommentColor
+
+assertTipOutBlueColor :: Bool -> [String] -> Assertion
+assertTipOutBlueColor True = assertTipOut $ assert . hasBlueColor
+assertTipOutBlueColor False = assertTipOut $ assert . not . hasBlueColor

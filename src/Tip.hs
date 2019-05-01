@@ -8,6 +8,13 @@ module Tip
     , editTip
     , searchTips
     , listTips
+    , tipDirEnvVarName
+    , insufficientArgumentFailure
+    , insufficientArgumentString
+    , usageFailure
+    , usageString
+    , tipDoesNotExistFailure
+    , tipDoesNotExistString
     ) where
 
 import System.Environment(getEnv)
@@ -35,6 +42,24 @@ import System.Console.ANSI(ColorIntensity(Dull)
                           ,Color(Blue, Red)
                           ,SGR(SetColor)
                           ,ConsoleLayer(Foreground))
+
+insufficientArgumentFailure :: ExitCode
+insufficientArgumentFailure = ExitFailure 1
+
+insufficientArgumentString :: String
+insufficientArgumentString = "Requires at least 1 arguments, got 0\n"
+
+usageFailure :: ExitCode
+usageFailure = ExitFailure 2
+
+usageString :: String
+usageString = "Usage: tip [-h|-l] [-e|-f] [OPTIONS] TIP"
+
+tipDoesNotExistFailure :: ExitCode
+tipDoesNotExistFailure = ExitFailure 3
+
+tipDoesNotExistString :: String
+tipDoesNotExistString = "Tip does not exist (create with -e)."
 
 -- The environment variable with the directory for the tips
 tipDirEnvVarName :: String
@@ -81,10 +106,12 @@ readExistingTip :: String -> String -> IO (Maybe String)
 readExistingTip password fileName = do
   let gpgCommandArgs = if null password then
                          ["-q"
+                         , "--batch"
                          , "--no-tty"
                          , "-d", fileName]
                        else
                          ["-q"
+                         , "--batch"
                          , "--no-tty"
                          , "--passphrase-fd", "0"
                          , "-d", fileName]
@@ -107,8 +134,8 @@ readTip password fileName = do
 -- Print the contents of a tip file
 printTip :: Bool -> Maybe String -> IO ()
 printTip _ Nothing = do
-  hPutStrLn stderr "Tip does not exist (create with -e)."
-  exitWith $ ExitFailure 2
+  hPutStrLn stderr tipDoesNotExistString
+  exitWith tipDoesNotExistFailure
 printTip True (Just contents) =
   putStrLn =<< readProcess "pygmentize" ["-l"
                                         , "sh"
@@ -125,19 +152,23 @@ editTip dir tip = do
   exitCode <- system (concat [editorCommand, " ", fileName])
   exitWith exitCode
 
+tipsInDir :: String -> IO [String]
+tipsInDir dir = do
+  allFiles <- getDirectoryContents dir
+  return $ filter (isSuffixOf $ "." ++ tipExtension) allFiles
+
 searchTips :: String -> String -> Bool -> String -> IO ()
 searchTips dir regexp noColor password = do
-  allFiles <- getDirectoryContents dir
-  let tipFiles = filter (isSuffixOf $ "." ++ tipExtension) allFiles
-      paths = fmap (dir </>) tipFiles
-  contents <- liftM catMaybes $ mapConcurrently (readExistingTip password) paths
+  tipFiles <- tipsInDir dir
+  let paths = fmap (dir </>) tipFiles
+  contents <- catMaybes <$> mapConcurrently (readExistingTip password) paths
   let lineNumbers = [1..] :: [Int]
       truncatedFileNames = fmap takeBaseName tipFiles
       annotatedLines = concatMap
-                       (\(fileName, content) -> (zip3
+                       (\(fileName, content) -> zip3
                                                  (repeat fileName)
                                                  lineNumbers
-                                                 (lines content)))
+                                                 (lines content))
                        (zip truncatedFileNames contents)
       matching = filter ((=~ regexp) . third) annotatedLines
       alignment = 2 + foldr (\(x, y, _) -> max $ length $ x ++ show y) 0 matching
@@ -171,6 +202,5 @@ searchTips dir regexp noColor password = do
            putStrLn rest
 
 listTips :: String -> IO [String]
-listTips dir = do
-  allFiles <- getDirectoryContents dir
-  return $ takeBaseName <$> filter (isSuffixOf $ "." ++ tipExtension) allFiles
+listTips dir = takeBaseName <<$>> tipsInDir dir
+  where (<<$>>) = fmap . fmap
